@@ -1,0 +1,16 @@
+# Built binaries
+/jpghash
+/jpghash.exe
+/dist/
+
+# Go test / coverage artifacts
+*.test
+*.out
+
+# IDE / editor
+/.vscode/
+/.idea/
+
+# OS
+.DS_Store
+Thumbs.db
