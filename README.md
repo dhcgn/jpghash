@@ -1,5 +1,11 @@
 # jpghash
 
+[![Build](https://img.shields.io/github/actions/workflow/status/dhcgn/jpghash/build.yml?branch=main)](https://github.com/dhcgn/jpghash/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/dhcgn/jpghash)](https://github.com/dhcgn/jpghash/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/dhcgn/jpghash)](go.mod)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dhcgn/jpghash)](https://goreportcard.com/report/github.com/dhcgn/jpghash)
+[![Downloads](https://img.shields.io/github/downloads/dhcgn/jpghash/total)](https://github.com/dhcgn/jpghash/releases)
+
 A small Go CLI that prints a SHA-256 hash of a JPEG's **image-relevant bitstream** — the parts of the file that determine the decoded pixels. Metadata-only differences (EXIF, XMP, ICC profile, JFIF header, comments) are stripped before hashing, so two JPEGs with identical image content but different metadata produce the same digest.
 
 ## Usage
