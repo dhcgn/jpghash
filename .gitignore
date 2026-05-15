@@ -5,7 +5,10 @@
 
 # Go test / coverage artifacts
 *.test
+*.test.exe
 *.out
+*.prof
+bench-*.txt
 
 # IDE / editor
 /.vscode/

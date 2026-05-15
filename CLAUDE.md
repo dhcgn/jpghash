@@ -35,7 +35,12 @@ If you change the metadata-skip predicate (e.g. to include ICC profile / APP2 or
 
 ## Test-data invariant
 
-`test-data/equal-image/` holds two JPEGs that differ **only** in EXIF (sizes 16,858,534 vs 16,870,579 bytes; APP1 lengths 1123 vs 13168). `TestEqualImagesHashEqually` asserts both files produce the identical digest — this is the core correctness check for the whole tool. Any change to the hashing algorithm must keep this test green, and changes that affect the digest will rebaseline it for everyone (the digest is not pinned, only equality between the two files is checked).
+`test-data/equal-image/` holds two JPEGs that differ **only** in EXIF (sizes 16,858,534 vs 16,870,579 bytes; APP1 lengths 1123 vs 13168). Two tests guard the algorithm:
+
+- `TestEqualImagesHashEqually` — both files must produce the same digest. This is the core correctness property (EXIF doesn't affect the hash).
+- `TestKnownDigest` — the digest itself is pinned to a constant (`expectedDigest` in `jpghash_test.go`). This catches accidental byte-level drift from refactors that *happen* to preserve the equal-images property.
+
+Any change that alters the bytes fed to SHA-256 will break `TestKnownDigest`. If the change is intentional, rebaseline the constant in the same commit so the digest shift shows up in the diff.
 
 ## Release pipeline
 
