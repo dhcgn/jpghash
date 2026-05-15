@@ -24,28 +24,28 @@ jobs:
           GOOS: linux
           GOARCH: amd64
           CGO_ENABLED: 0
-        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-linux-amd64 .
+        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-linux-amd64 ./cmd/jpghash
 
       - name: Build linux/arm64
         env:
           GOOS: linux
           GOARCH: arm64
           CGO_ENABLED: 0
-        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-linux-arm64 .
+        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-linux-arm64 ./cmd/jpghash
 
       - name: Build windows/amd64
         env:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: 0
-        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-windows-amd64.exe .
+        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-windows-amd64.exe ./cmd/jpghash
 
       - name: Build darwin/arm64
         env:
           GOOS: darwin
           GOARCH: arm64
           CGO_ENABLED: 0
-        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-darwin-arm64 .
+        run: go build -trimpath -ldflags='-s -w' -o dist/jpghash-${{ github.ref_name }}-darwin-arm64 ./cmd/jpghash
 
       - name: Create release
         uses: softprops/action-gh-release@v2
