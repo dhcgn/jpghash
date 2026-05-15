@@ -13,6 +13,7 @@ bench-*.txt
 # IDE / editor
 /.vscode/
 /.idea/
+/.claude/
 
 # OS
 .DS_Store

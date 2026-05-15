@@ -6,23 +6,40 @@ import (
 	"crypto/sha256"
 	"io"
 	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 )
 
-const benchJPEG = "test-data/equal-image/DSC_3264-NEF_DxO_DeepPRIME.jpg"
+// benchData is a multi-MB synthetic JPEG built once and reused by all
+// benchmarks so each iteration measures parsing/hashing — not synthesis.
+var (
+	benchDataOnce sync.Once
+	benchData     []byte
+)
+
+func loadBenchData(tb testing.TB) []byte {
+	benchDataOnce.Do(func() {
+		img := synthImage(synthBenchWidth, synthBenchHt, synthSeed)
+		benchData = synthEncode(tb, img, synthQuality)
+	})
+	return benchData
+}
 
 // BenchmarkHashFile measures end-to-end throughput including os.Open and
-// buffered I/O — i.e. what a CLI invocation actually pays.
+// buffered I/O — i.e. what a CLI invocation actually pays. The synthetic
+// JPEG is materialized to a temp file once outside the timed loop.
 func BenchmarkHashFile(b *testing.B) {
-	info, err := os.Stat(benchJPEG)
-	if err != nil {
-		b.Fatalf("stat %s: %v", benchJPEG, err)
+	data := loadBenchData(b)
+	path := filepath.Join(b.TempDir(), "bench.jpg")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		b.Fatalf("write %s: %v", path, err)
 	}
-	b.SetBytes(info.Size())
+	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 
 	for b.Loop() {
-		if _, err := HashFile(benchJPEG); err != nil {
+		if _, err := HashFile(path); err != nil {
 			b.Fatalf("HashFile: %v", err)
 		}
 	}
@@ -31,10 +48,7 @@ func BenchmarkHashFile(b *testing.B) {
 // BenchmarkHashReader isolates the parser + hasher by serving bytes from
 // memory, removing disk I/O from the measurement.
 func BenchmarkHashReader(b *testing.B) {
-	data, err := os.ReadFile(benchJPEG)
-	if err != nil {
-		b.Fatalf("read %s: %v", benchJPEG, err)
-	}
+	data := loadBenchData(b)
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 
@@ -50,10 +64,7 @@ func BenchmarkHashReader(b *testing.B) {
 // is a sub-slice of the caller's buffer. Compare with BenchmarkHashReader to
 // see how much of HashReader's cost is the bufio fill memcopy.
 func BenchmarkHashBytes(b *testing.B) {
-	data, err := os.ReadFile(benchJPEG)
-	if err != nil {
-		b.Fatalf("read %s: %v", benchJPEG, err)
-	}
+	data := loadBenchData(b)
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 
@@ -68,10 +79,7 @@ func BenchmarkHashBytes(b *testing.B) {
 // JPEG parsing. The gap between this and BenchmarkHashReader is the cost of
 // the marker walker plus the entropy-scan FF-handling loop.
 func BenchmarkSHA256Baseline(b *testing.B) {
-	data, err := os.ReadFile(benchJPEG)
-	if err != nil {
-		b.Fatalf("read %s: %v", benchJPEG, err)
-	}
+	data := loadBenchData(b)
 	b.SetBytes(int64(len(data)))
 	b.ReportAllocs()
 
