@@ -161,10 +161,18 @@ func HashBytes(data []byte) (string, error) {
 				if idx < 0 {
 					return "", errors.New("unexpected EOF in scan data")
 				}
-				next := rem[idx+1]
-				if next == 0x00 || (next >= 0xD0 && next <= 0xD7) {
-					h.Write(rem[:idx+2])
-					pos += idx + 2
+				// Skip fill bytes to find the actual marker byte.
+				markerPos := idx + 1
+				for markerPos < len(rem) && rem[markerPos] == 0xFF {
+					markerPos++
+				}
+				if markerPos >= len(rem) {
+					return "", errors.New("unexpected EOF in scan data")
+				}
+				actual := rem[markerPos]
+				if actual == 0x00 || (actual >= 0xD0 && actual <= 0xD7) {
+					h.Write(rem[:markerPos+1])
+					pos += markerPos + 1
 					continue
 				}
 				h.Write(rem[:idx])
@@ -204,16 +212,35 @@ func hashEntropyData(r *bufio.Reader, h hash.Hash) error {
 			}
 			continue
 		}
-		next := peek[idx+1]
-		if next == 0x00 || (next >= 0xD0 && next <= 0xD7) {
-			h.Write(peek[:idx+2])
-			if _, err := r.Discard(idx + 2); err != nil {
+		// Skip the leading 0xFF and any fill bytes (0xFF padding allowed by
+		// the JPEG spec before any marker) to find the actual marker byte.
+		markerPos := idx + 1
+		for markerPos < len(peek) && peek[markerPos] == 0xFF {
+			markerPos++
+		}
+		if markerPos >= len(peek) {
+			// Fill-byte run reaches the edge of the peek window; hash up to
+			// the first 0xFF and return so the next iteration can re-peek
+			// and resolve the marker byte.
+			if idx > 0 {
+				h.Write(peek[:idx])
+				if _, err := r.Discard(idx); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		actual := peek[markerPos]
+		if actual == 0x00 || (actual >= 0xD0 && actual <= 0xD7) {
+			// Byte stuffing or restart marker, possibly preceded by fill bytes.
+			h.Write(peek[:markerPos+1])
+			if _, err := r.Discard(markerPos + 1); err != nil {
 				return err
 			}
 			continue
 		}
-		// Segment boundary at peek[idx]; leave FF + next byte for the
-		// outer marker reader.
+		// Real segment marker; leave the 0xFF fill bytes + marker in the
+		// reader for the outer loop's readMarker to consume.
 		if idx > 0 {
 			h.Write(peek[:idx])
 			if _, err := r.Discard(idx); err != nil {

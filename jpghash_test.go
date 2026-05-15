@@ -41,6 +41,14 @@ func TestKnownDigest(t *testing.T) {
 	}
 }
 
+func TestNoErrorOnPICA0372(t *testing.T) {
+	path := "test-data/should-no-error/PICA0372.jpg"
+	_, err := HashFile(path)
+	if err != nil {
+		t.Fatalf("hash %s: %v", path, err)
+	}
+}
+
 func TestHashBytesMatchesPinned(t *testing.T) {
 	path := "test-data/equal-image/DSC_3264-NEF_DxO_DeepPRIME.jpg"
 	data, err := os.ReadFile(path)
