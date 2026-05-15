@@ -1,4 +1,7 @@
-package main
+// Package jpghash computes a SHA-256 hash over the decode-relevant parts of a
+// JPEG. APP0–APP15 (FFE0–FFEF) and COM (FFFE) payloads are skipped so EXIF /
+// XMP / ICC / JFIF / comment differences do not affect the digest.
+package jpghash
 
 import (
 	"bufio"
@@ -12,40 +15,32 @@ import (
 	"os"
 )
 
-func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "usage: %s <jpeg-file>\n", os.Args[0])
-		os.Exit(2)
-	}
-	sum, err := hashJPEGImage(os.Args[1])
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	fmt.Println(sum)
-}
-
-// hashJPEGImage returns the SHA-256 of a JPEG with APPn (FFE0-FFEF) and
-// COM (FFFE) segments stripped, so files that differ only in EXIF / XMP /
-// ICC / JFIF / comments hash identically.
-func hashJPEGImage(path string) (string, error) {
+// HashFile opens path and returns the JPEG content hash.
+func HashFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
+	return HashReader(bufio.NewReaderSize(f, 1<<16))
+}
 
-	r := bufio.NewReaderSize(f, 1<<16)
+// HashReader computes the JPEG content hash from a *bufio.Reader. Callers pass
+// a *bufio.Reader (not an io.Reader) so a wrapping io.TeeReader can guarantee
+// that every byte bufio fetches — including look-ahead — flows through the
+// tee. Bytes after the EOI marker are not consumed; drain the reader if you
+// need full-file coverage.
+func HashReader(br *bufio.Reader) (string, error) {
 	h := sha256.New()
 
-	soi, err := readN(r, 2)
+	soi, err := readN(br, 2)
 	if err != nil || soi[0] != 0xFF || soi[1] != 0xD8 {
 		return "", errors.New("not a JPEG: missing SOI")
 	}
 	h.Write(soi)
 
 	for {
-		marker, err := readMarker(r)
+		marker, err := readMarker(br)
 		if err != nil {
 			return "", err
 		}
@@ -62,7 +57,7 @@ func hashJPEGImage(path string) (string, error) {
 			continue
 		}
 
-		lenBytes, err := readN(r, 2)
+		lenBytes, err := readN(br, 2)
 		if err != nil {
 			return "", fmt.Errorf("short read on length for marker FF%02X: %w", marker, err)
 		}
@@ -70,7 +65,7 @@ func hashJPEGImage(path string) (string, error) {
 		if segLen < 2 {
 			return "", fmt.Errorf("invalid segment length %d for marker FF%02X", segLen, marker)
 		}
-		payload, err := readN(r, segLen-2)
+		payload, err := readN(br, segLen-2)
 		if err != nil {
 			return "", fmt.Errorf("short read on payload for marker FF%02X: %w", marker, err)
 		}
@@ -83,7 +78,7 @@ func hashJPEGImage(path string) (string, error) {
 		}
 
 		if marker == 0xDA {
-			if err := hashEntropyData(r, h); err != nil {
+			if err := hashEntropyData(br, h); err != nil {
 				return "", err
 			}
 		}

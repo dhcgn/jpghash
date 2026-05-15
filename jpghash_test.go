@@ -1,4 +1,4 @@
-package main
+package jpghash
 
 import "testing"
 
@@ -6,11 +6,11 @@ func TestEqualImagesHashEqually(t *testing.T) {
 	a := "test-data/equal-image/DSC_3264-NEF_DxO_DeepPRIME.jpg"
 	b := "test-data/equal-image/DSC_3264-NEF_DxO_DeepPRIME(1).jpg"
 
-	ha, err := hashJPEGImage(a)
+	ha, err := HashFile(a)
 	if err != nil {
 		t.Fatalf("hash %s: %v", a, err)
 	}
-	hb, err := hashJPEGImage(b)
+	hb, err := HashFile(b)
 	if err != nil {
 		t.Fatalf("hash %s: %v", b, err)
 	}
