@@ -119,3 +119,31 @@ func TestBaselineEntropyContainsFFStuffing(t *testing.T) {
 		t.Fatalf("synthBaseline scan contains no FF 00 stuffing — increase noise or change seed")
 	}
 }
+
+// TestMagicByteRejection exercises the format-naming branch of the SOI
+// check. Real-world inputs hit this when a `.jpg` extension lies — BMPs,
+// PNGs, and encrypted blobs being the common cases.
+func TestMagicByteRejection(t *testing.T) {
+	cases := []struct {
+		name string
+		head []byte
+		want string
+	}{
+		{"empty", nil, "not a JPEG: empty file"},
+		{"BMP", []byte{0x42, 0x4D, 0x00, 0x00}, "not a JPEG: detected BMP"},
+		{"PNG", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, "not a JPEG: detected PNG"},
+		{"unknown", []byte{0x24, 0x1A, 0x9C, 0x92, 0x6D, 0x85, 0xCE, 0x6D}, "not a JPEG: unrecognized magic bytes 241A9C926D85CE6D"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := HashBytes(tc.head)
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("HashBytes(%X):\n  got:  %v\n  want: %s", tc.head, err, tc.want)
+			}
+			_, err = HashReader(bufio.NewReader(bytes.NewReader(tc.head)))
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("HashReader(%X):\n  got:  %v\n  want: %s", tc.head, err, tc.want)
+			}
+		})
+	}
+}

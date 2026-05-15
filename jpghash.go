@@ -22,7 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
+	"fmt"
 	"hash"
 	"os"
 )
@@ -103,20 +103,24 @@ func (s *source) consume(n int) {
 
 // hashJPEG is the single parser shared by HashReader and HashBytes.
 //
-// State machine: validate SOI, then loop walking markers. Standalone markers
-// (TEM, RST0–7 between segments) are written as [FF, marker]. EOI ends the
-// hash cleanly. Segment markers read [length, payload]; metadata payloads
-// (APP0–APP15, COM) are dropped from the hash, everything else is written.
-// After an SOS marker, scanEntropy streams the entropy-coded data.
+// State machine: magic-byte check for SOI, then loop walking markers.
+// Standalone markers (TEM, RST0–7 between segments) are written as
+// [FF, marker]. EOI ends the hash cleanly. Segment markers read
+// [length, payload]; metadata payloads (APP0–APP15, COM) are dropped from
+// the hash, everything else is written. After an SOS marker, scanEntropy
+// streams the entropy-coded data.
 //
 // Lenient finalize: post-SOI, every parse hiccup routes through finalize()
 // which returns the partial hash with nil error.
 func hashJPEG(src *source) (string, error) {
 	h := sha256.New()
 
-	head := src.peek(2)
+	// Magic-byte check. Peek 8 so the rejection error can name the actual
+	// format (BMP / PNG / etc.) when the extension lies. Only the SOI pair
+	// is consumed on success.
+	head := src.peek(8)
 	if len(head) < 2 || head[0] != 0xFF || head[1] != 0xD8 {
-		return "", errors.New("not a JPEG: missing SOI")
+		return "", fmt.Errorf("not a JPEG: %s", describeNonJPEG(head))
 	}
 	h.Write(head[:2])
 	src.consume(2)
@@ -190,6 +194,35 @@ func hashJPEG(src *source) (string, error) {
 // metadata"; edit here if e.g. ICC (APP2) or Adobe (APP14) should be hashed.
 func isMetadata(marker byte) bool {
 	return (marker >= 0xE0 && marker <= 0xEF) || marker == 0xFE
+}
+
+// describeNonJPEG names the file format from leading bytes (or echoes them
+// as hex when no signature matches), for the magic-byte rejection error.
+// Lets callers distinguish a misnamed BMP/PNG/encrypted blob from a real
+// broken JPEG when triaging "not a JPEG" logs.
+func describeNonJPEG(head []byte) string {
+	if len(head) == 0 {
+		return "empty file"
+	}
+	switch {
+	case len(head) >= 2 && head[0] == 0x42 && head[1] == 0x4D:
+		return "detected BMP"
+	case len(head) >= 4 && head[0] == 0x89 && head[1] == 0x50 && head[2] == 0x4E && head[3] == 0x47:
+		return "detected PNG"
+	case len(head) >= 3 && head[0] == 0x47 && head[1] == 0x49 && head[2] == 0x46:
+		return "detected GIF"
+	case len(head) >= 4 && head[0] == 0x49 && head[1] == 0x49 && head[2] == 0x2A && head[3] == 0x00:
+		return "detected TIFF (little-endian)"
+	case len(head) >= 4 && head[0] == 0x4D && head[1] == 0x4D && head[2] == 0x00 && head[3] == 0x2A:
+		return "detected TIFF (big-endian)"
+	case len(head) >= 4 && head[0] == 0x52 && head[1] == 0x49 && head[2] == 0x46 && head[3] == 0x46:
+		return "detected RIFF (WebP/AVI/WAV)"
+	case len(head) >= 4 && head[0] == 0x25 && head[1] == 0x50 && head[2] == 0x44 && head[3] == 0x46:
+		return "detected PDF"
+	case len(head) >= 8 && head[4] == 0x66 && head[5] == 0x74 && head[6] == 0x79 && head[7] == 0x70:
+		return "detected ISOBMFF (MP4/HEIC/HEIF)"
+	}
+	return fmt.Sprintf("unrecognized magic bytes %X", head)
 }
 
 // scanEntropy streams compressed scan bytes through h until the next real
